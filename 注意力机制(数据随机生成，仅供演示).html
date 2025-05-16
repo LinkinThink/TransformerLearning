@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Attention Visualization Demo</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    text-align: center;
+  }
+  #attention-viz {
+    display: inline-block;
+    position: relative;
+  }
+  .sentence-container {
+    position: relative;
+    margin-top: 40px;
+  }
+  .sentence {
+    user-select: none;
+    font-size: 18px;
+    padding-top: 20px;
+    position: relative;
+    display: inline-block;
+  }
+  .word {
+    display: inline-block;
+    margin: 0 8px;
+    padding: 4px 6px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+    position: relative;
+  }
+  .word.highlight {
+    background-color: #ffeb3b;
+    font-weight: bold;
+  }
+  svg.matrix {
+    border: 1px solid #ccc;
+    margin-top: 10px;
+    overflow: visible;
+  }
+  svg.arcs {
+    position: absolute;
+    top: -40;
+    left: 0;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 2;
+  }
+  .axis-label {
+    font-weight: bold;
+    font-size: 16px;
+    fill: #333;
+  }
+</style>
+</head>
+<body>
+
+<h2>注意力机制可视化</h2>
+
+<div id="attention-viz">
+  <svg id="attention-matrix" class="matrix" width="600" height="600"></svg>
+
+  <div class="sentence-container" id="sentence-container" style="width: 600px;">
+    <svg id="arcs-svg" class="arcs" width="600" height="60"></svg>
+    <div class="sentence" id="sentence"></div>
+  </div>
+</div>
+
+<script>
+const sentence = "The quick brown fox jumps over the lazy dog".split(" ");
+const N = sentence.length;
+const attentionMatrix = Array.from({ length: N }, () => Array.from({ length: N }, () => Math.random()));
+
+const svg = document.getElementById("attention-matrix");
+const width = +svg.getAttribute("width");
+const height = +svg.getAttribute("height");
+const padding = 100;
+const gridSize = (width - padding) / N;
+svg.innerHTML = "";
+
+for(let i=0; i<=N; i++) {
+  [
+    { x1: padding, y1: padding + i * gridSize, x2: padding + N * gridSize, y2: padding + i * gridSize },
+    { x1: padding + i * gridSize, y1: padding, x2: padding + i * gridSize, y2: padding + N * gridSize }
+  ].forEach(({x1, y1, x2, y2}) => {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", x1);
+    line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2);
+    line.setAttribute("y2", y2);
+    line.setAttribute("stroke", "#ddd");
+    svg.appendChild(line);
+  });
+}
+
+const axisLabelK = document.createElementNS("http://www.w3.org/2000/svg", "text");
+axisLabelK.setAttribute("x", padding + (N * gridSize)/2);
+axisLabelK.setAttribute("y", padding - 50);
+axisLabelK.setAttribute("text-anchor", "middle");
+axisLabelK.setAttribute("class", "axis-label");
+axisLabelK.textContent = "K";
+svg.appendChild(axisLabelK);
+
+const axisLabelQ = document.createElementNS("http://www.w3.org/2000/svg", "text");
+axisLabelQ.setAttribute("x", padding - 60);
+axisLabelQ.setAttribute("y", padding + (N * gridSize)/2);
+axisLabelQ.setAttribute("text-anchor", "middle");
+axisLabelQ.setAttribute("class", "axis-label");
+axisLabelQ.setAttribute("transform", `rotate(-90 ${padding - 60},${padding + (N * gridSize)/2})`);
+axisLabelQ.textContent = "Q";
+svg.appendChild(axisLabelQ);
+
+sentence.forEach((word, i) => {
+  const textX = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  textX.setAttribute("x", padding + i * gridSize + gridSize/2);
+  textX.setAttribute("y", padding - 10);
+  textX.setAttribute("text-anchor", "middle");
+  textX.setAttribute("font-size", "14px");
+  textX.textContent = word;
+  svg.appendChild(textX);
+
+  const textY = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  textY.setAttribute("x", padding - 10);
+  textY.setAttribute("y", padding + i * gridSize + gridSize/2 + 5);
+  textY.setAttribute("text-anchor", "end");
+  textY.setAttribute("font-size", "14px");
+  textY.textContent = word;
+  svg.appendChild(textY);
+});
+
+const minRadius = 5;
+const maxRadius = gridSize/2 * 0.9;
+const circlesGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+circlesGroup.setAttribute("id", "circlesGroup");
+svg.appendChild(circlesGroup);
+
+for(let i=0; i<N; i++) {
+  for(let j=0; j<N; j++) {
+    const val = attentionMatrix[i][j];
+    const radius = minRadius + val * (maxRadius - minRadius);
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", padding + j * gridSize + gridSize/2);
+    circle.setAttribute("cy", padding + i * gridSize + gridSize/2);
+    circle.setAttribute("r", radius);
+    circle.setAttribute("fill", `rgba(33, 150, 243, ${0.4 + 0.6 * val})`);
+    circle.setAttribute("stroke", "#1e88e5");
+    circle.setAttribute("stroke-width", "1");
+    circlesGroup.appendChild(circle);
+  }
+}
+
+const sentenceDiv = document.getElementById("sentence");
+const arcsSvg = document.getElementById("arcs-svg");
+sentence.forEach((word, idx) => {
+  const span = document.createElement("span");
+  span.textContent = word;
+  span.classList.add("word");
+  span.dataset.index = idx;
+  span.addEventListener("mouseenter", () => highlightWord(idx));
+  span.addEventListener("mouseleave", () => clearHighlight());
+  sentenceDiv.appendChild(span);
+});
+
+function highlightWord(index) {
+  document.querySelectorAll(".word").forEach(w => w.classList.toggle("highlight", +w.dataset.index === index));
+  Array.from(circlesGroup.children).forEach(circle => {
+    const cx = +circle.getAttribute("cx");
+    const cy = +circle.getAttribute("cy");
+    const col = Math.floor((cx - padding) / gridSize);
+    const row = Math.floor((cy - padding) / gridSize);
+
+    if(row === index && col < index) {
+      circle.setAttribute("fill", `rgba(244, 67, 54, 0.8)`);
+      circle.setAttribute("stroke", "#d32f2f");
+      circle.setAttribute("stroke-width", "2");
+    } else {
+      circle.setAttribute("fill", `rgba(33, 150, 243, 0.15)`);
+      circle.setAttribute("stroke", "#1e88e5");
+      circle.setAttribute("stroke-width", "1");
+    }
+  });
+
+  arcsSvg.innerHTML = "";
+  const svgHeight = +arcsSvg.getAttribute("height");
+  const wordSpans = document.querySelectorAll(".word");
+  const positions = Array.from(wordSpans).map(span => {
+    const rect = span.getBoundingClientRect();
+    const containerRect = sentenceDiv.getBoundingClientRect();
+    return { x: rect.left - containerRect.left + rect.width/2, y: svgHeight * 0.8 };
+  });
+
+  const connections = [];
+  for (let i = 0; i < index; i++) {
+    connections.push({ idx: i, val: attentionMatrix[index][i] });
+  }
+  connections.sort((a, b) => b.val - a.val);
+  const top3 = connections.slice(0, 3);
+
+  top3.forEach(conn => {
+    const baseY = svgHeight * 0.8 - 20;  // 整体往上移动20px
+    const y1 = baseY;
+    const y2 = baseY;
+    const i = conn.idx;
+    const val = conn.val;
+    const x1 = positions[index].x;
+    // const y1 = positions[index].y;
+    const x2 = positions[i].x;
+    // const y2 = positions[i].y;
+    const mx = (x1 + x2) / 2;
+    const my = y1 - 40;
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", `M${x1},${y1} Q${mx},${my} ${x2},${y2}`);
+    path.setAttribute("stroke", "rgba(244,67,54,0.7)");
+    path.setAttribute("stroke-width", 2 + val * 4);
+    path.setAttribute("fill", "none");
+    arcsSvg.appendChild(path);
+  });
+}
+
+function clearHighlight() {
+  document.querySelectorAll(".word").forEach(w => w.classList.remove("highlight"));
+  Array.from(circlesGroup.children).forEach((circle, idx) => {
+    const i = Math.floor(idx / N);
+    const j = idx % N;
+    const val = attentionMatrix[i][j];
+    circle.setAttribute("fill", `rgba(33, 150, 243, ${0.4 + 0.6 * val})`);
+    circle.setAttribute("stroke", "#1e88e5");
+    circle.setAttribute("stroke-width", "1");
+  });
+  arcsSvg.innerHTML = "";
+}
+</script>
+
+</body>
+</html>
